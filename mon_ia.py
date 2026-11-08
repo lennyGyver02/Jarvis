@@ -1,4 +1,4 @@
-import os, json, re, glob
+import os, json, re, glob, traceback
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from groq import Groq
 
@@ -24,23 +24,25 @@ def save_mem(user, mem):
 
 HTML = """<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>JARVIS</title><style>
-body{background:#000;color:#fff;font-family:sans-serif;text-align:center;padding:20px}
-#login{background:#111;padding:20px;border-radius:15px;max-width:350px;margin:40px auto}
-input{width:90%;padding:12px;margin:8px;border-radius:10px;border:none;font-size:16px}
-button{background:#00d4ff;color:#000;border:none;padding:12px 20px;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer;width:95%}
-#chat{display:none;max-width:600px;margin:auto}
-#msgs{height:55vh;overflow:auto;text-align:left;background:#111;border-radius:15px;padding:15px;margin:10px 0}
-.msg{margin:8px 0;padding:10px;border-radius:10px;background:#222}
-.me{background:#004466;text-align:right}
-#orb{width:100px;height:100px;border-radius:50%;background:radial-gradient(circle,#00d4ff,#004466);margin:10px auto;box-shadow:0 0 40px #00d4ff}
-#box{display:flex;gap:5px} #q{flex:1}
+body{background:#000;color:#fff;font-family:Arial,sans-serif;text-align:center;padding:15px;margin:0}
+#login{background:#0a0a0a;padding:25px;border-radius:20px;max-width:360px;margin:60px auto;border:1px solid #222}
+input{width:90%;padding:13px;margin:8px;border-radius:12px;border:1px solid #333;background:#111;color:#fff;font-size:16px}
+button{background:#00d4ff;color:#000;border:none;padding:13px 20px;border-radius:12px;font-size:16px;font-weight:bold;cursor:pointer;width:95%}
+#chat{display:none;max-width:650px;margin:auto}
+#orb{width:130px;height:130px;border-radius:50%;background:radial-gradient(circle at 35% 35%, #aefaff, #00d4ff 40%, #004466 75%);margin:15px auto;box-shadow:0 0 60px #00d4ff, 0 0 120px #00d4ff55;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+#msgs{height:52vh;overflow:auto;text-align:left;background:#0a0a0a;border:1px solid #222;border-radius:20px;padding:15px;margin:12px 0}
+.msg{margin:10px 0;padding:12px 14px;border-radius:16px;background:#1a1a1a;max-width:85%;line-height:1.4}
+.me{background:#004466;margin-left:auto;text-align:right}
+#box{display:flex;gap:8px} #q{flex:1}
+.small{background:#222;color:#fff;margin-top:10px}
 </style></head><body>
-<div id="login"><h1>JARVIS</h1><p>Chacun son JARVIS perso</p>
+<div id="login"><div id="orb"></div><h1>JARVIS</h1><p>Ton assistant perso</p>
 <input id="pseudo" placeholder="Ton pseudo"><input id="code" placeholder="Ton code secret" type="password">
-<button onclick="entrer()">ENTRER DANS MON JARVIS</button><p id="err" style="color:red"></p></div>
+<button onclick="entrer()">ENTRER</button><p id="err" style="color:#ff5555"></p></div>
 <div id="chat"><div id="orb"></div><h2 id="titre"></h2><div id="msgs"></div>
-<div id="box"><input id="q" placeholder="Parle a ton JARVIS..."><button onclick="envoyer()">Envoyer</button></div>
-<button onclick="localStorage.clear();location.reload()" style="background:#333;color:#fff;margin-top:10px">Changer de compte</button></div>
+<div id="box"><input id="q" placeholder="Parle a JARVIS..."><button onclick="envoyer()">Envoyer</button></div>
+<button class="small" onclick="localStorage.clear();location.reload()">Changer de compte</button></div>
 <script>
 let pseudo=localStorage.getItem('pseudo'), code=localStorage.getItem('code');
 if(pseudo && code){showChat()}
@@ -116,10 +118,17 @@ class H(BaseHTTPRequestHandler):
         if any(k in low for k in ["je m'appelle","je suis","j'habite","j'aime","mon anniversaire"]):
             if q not in mem["facts"]: mem["facts"].append(q)
         prompt=f"Tu es JARVIS, l'assistant perso de {user}. Ce que tu sais sur lui : {'; '.join(mem['facts'][-10:])}. Reponds en francais, cool, court, comme un pote."
-        try:
-            r=client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"system","content":prompt}]+mem["messages"][-10:],max_tokens=300)
-            rep=r.choices[0].message.content
-        except Exception as e: rep="Oups, erreur Groq, reessaie."
+        rep=None; err=""
+        # On essaie 2 modeles, si le 1er est mort on prend le 2eme
+        for model in ["llama-3.1-8b-instant", "openai/gpt-oss-120b", "llama-3.3-70b-versatile"]:
+            try:
+                r=client.chat.completions.create(model=model,messages=[{"role":"system","content":prompt}]+mem["messages"][-10:],max_tokens=300)
+                rep=r.choices[0].message.content; break
+            except Exception as e:
+                err=str(e); print(f"MODELE {model} ERREUR: {err}"); continue
+        if not rep:
+            rep=f"Erreur Groq : {err[:200]} - Verifie ta cle GROQ_API_KEY sur Render"
+            print(traceback.format_exc())
         mem["messages"].append({"role":"assistant","content":rep}); save_mem(user,mem)
         self.send_json({"reply":rep})
     def send_json(self,obj,code=200):
