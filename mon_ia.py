@@ -35,7 +35,7 @@ button{background:#00d4ff;color:#000;border:none;padding:12px 20px;border-radius
 #box{display:flex;gap:5px} #q{flex:1}
 </style></head><body>
 <div id="login"><h1>JARVIS</h1><p>Chacun son JARVIS perso</p>
-<input id="pseudo" placeholder="Ton pseudo ex: Lenny"><input id="code" placeholder="Ton code secret ex: 1234" type="password">
+<input id="pseudo" placeholder="Ton pseudo"><input id="code" placeholder="Ton mot de passe" type="password">
 <button onclick="entrer()">ENTRER DANS MON JARVIS</button><p id="err" style="color:red"></p></div>
 <div id="chat"><div id="orb"></div><h2 id="titre"></h2><div id="msgs"></div>
 <div id="box"><input id="q" placeholder="Parle a ton JARVIS..."><button onclick="envoyer()">Envoyer</button></div>
