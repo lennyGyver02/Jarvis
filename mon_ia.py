@@ -1,8 +1,9 @@
-import os, json, re
+import os, json, re, glob
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from groq import Groq
 
 API_KEY = os.environ.get("GROQ_API_KEY", "")
+ADMIN_CODE = os.environ.get("ADMIN_CODE", "1003")
 client = Groq(api_key=API_KEY) if API_KEY else None
 PORT = int(os.environ.get("PORT", 8000))
 
@@ -35,7 +36,7 @@ button{background:#00d4ff;color:#000;border:none;padding:12px 20px;border-radius
 #box{display:flex;gap:5px} #q{flex:1}
 </style></head><body>
 <div id="login"><h1>JARVIS</h1><p>Chacun son JARVIS perso</p>
-<input id="pseudo" placeholder="Ton pseudo"><input id="code" placeholder="Ton mot de passe" type="password">
+<input id="pseudo" placeholder="Ton pseudo"><input id="code" placeholder="Ton code secret" type="password">
 <button onclick="entrer()">ENTRER DANS MON JARVIS</button><p id="err" style="color:red"></p></div>
 <div id="chat"><div id="orb"></div><h2 id="titre"></h2><div id="msgs"></div>
 <div id="box"><input id="q" placeholder="Parle a ton JARVIS..."><button onclick="envoyer()">Envoyer</button></div>
@@ -64,8 +65,38 @@ async function envoyer(){
 document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter')envoyer()});
 </script></body></html>"""
 
+ADMIN_HTML = """<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Admin JARVIS</title>
+<style>body{background:#000;color:#fff;font-family:sans-serif;padding:20px} input{padding:12px;border-radius:10px;border:none;width:250px} button{background:#00d4ff;border:none;padding:12px 20px;border-radius:10px;font-weight:bold;cursor:pointer} .user{background:#111;padding:15px;border-radius:15px;margin:15px 0;text-align:left} .msg{padding:8px;background:#222;border-radius:8px;margin:5px 0} .me{background:#004466;text-align:right}</style>
+</head><body><h1>Panel Admin</h1><input id="code" type="password" placeholder="Code admin"><button onclick="load()">VOIR</button><div id="list"></div>
+<script>
+async function load(){
+  let code=document.getElementById('code').value;
+  let r=await fetch('/admin_data',{headers:{'X-Admin':code}}); let d=await r.json();
+  if(d.error){alert(d.error);return}
+  let h='';
+  d.users.forEach(u=>{
+    h+='<div class="user"><h3>'+u.name+' - '+u.messages.length+' messages - faits: '+(u.facts.join(' | ')||'aucun')+'</h3>';
+    u.messages.slice(-20).forEach(m=>{h+='<div class="msg'+(m.role=='user'?' me':'')+'"><b>'+m.role+':</b> '+m.content+'</div>'});
+    h+='</div>';
+  });
+  document.getElementById('list').innerHTML=h||'Aucun utilisateur pour le moment';
+}
+</script></body></html>"""
+
 class H(BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path == "/admin":
+            self.send_response(200); self.send_header("Content-Type","text/html"); self.end_headers(); self.wfile.write(ADMIN_HTML.encode()); return
+        if self.path == "/admin_data":
+            if self.headers.get("X-Admin","") != ADMIN_CODE:
+                return self.send_json({"error":"Mauvais code admin"},403)
+            users=[]
+            for f in glob.glob("memoire_*.json"):
+                try:
+                    with open(f, encoding="utf-8") as fh: mem=json.load(fh)
+                    users.append({"name":f.replace("memoire_","").replace(".json",""),"facts":mem.get("facts",[]),"messages":mem.get("messages",[])[-30:]})
+                except: pass
+            return self.send_json({"users":users})
         if self.path == "/history":
             user=safe_name(self.headers.get("X-User")); code=self.headers.get("X-Code","")
             mem=load_mem(user)
