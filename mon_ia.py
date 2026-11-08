@@ -5,7 +5,31 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 # CLE : en local tu mets ta clé ici, sur Render tu mets GROQ_API_KEY dans les variables d'environnement
 API_KEY = os.environ.get("GROQ_API_KEY", "")
 API_KEY = API_KEY.strip().strip('"').strip("'").strip()
-
+ADMIN_CODE = os.environ.get("ADMIN_CODE", "TON_CODE_ADMIN_ICI")
+def safe_user(s):
+    import re
+    s = re.sub(r'[^a-zA-Z0-9_-]', '', (s or '').lower().strip())
+    return s[:20] or "invite"
+def load_users():
+    try:
+        with open("users.json", encoding="utf-8") as f: return json.load(f)
+    except: return {}
+def save_users(u):
+    with open("users.json", "w", encoding="utf-8") as f: json.dump(u, f)
+def check_auth(headers):
+    user = safe_user(headers.get("X-User"))
+    code = headers.get("X-Code", "")
+    if not user or not code: return None
+    users = load_users()
+    if user in users:
+        if users[user] != code: return False
+    else:
+        users[user] = code; save_users(users)
+    return user
+MEMS = {}
+def get_mem(user):
+    if user not in MEMS: MEMS[user] = Memory(user)
+    return MEMS[user]
 TEXT_MODEL = "openai/gpt-oss-120b"
 TEXT_MODEL_FALLBACK = "openai/gpt-oss-20b"
 VISION_MODELS = ["qwen/qwen3.8-27b", "qwen/qwen3.6-27b"]
